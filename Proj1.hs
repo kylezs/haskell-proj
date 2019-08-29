@@ -4,9 +4,15 @@
 
 -- DESCRIPTION OF GAME AND HOW THIS PROGRAM PLAYS IT HERE
 
+-- !!!! THIS WAS A 14 GUESS TEST, WHY, WTF FUCKS UP?
+-- ./Proj1Test "2C" "2D" "7H" "AS"
+
 module Proj1 (feedback, initialGuess, nextGuess, GameState) where
 import Card
 import Data.List
+import Data.Ord
+
+-- NEXT: RUN OPTIMAL GUESS DEGUG FOR THE TESTING ANSWERS AND SEE HOW LONG IT TAKES/IF IT GETS STUCK
 
 -- ========= METHODS FOR ANSWERER ========= --
 type FeedbackScore = (Int, Int, Int, Int, Int)
@@ -16,15 +22,24 @@ feedback target guess = (matches, lowerRank, sameRank, higherRank, sameSuit)
     where matches = length $ intersect guess target
           lowestRankGuess = minimum (map rank guess)
           lowerRank = length [ rank | (Card suit rank) <- target, rank < lowestRankGuess ]
-          sameRank = sameF rank target guess
+          sameRank = sameF (map rank target) (map rank guess)
           highestRankGuess = maximum (map rank guess)
           higherRank = length [ rank | (Card suit rank) <- target, rank > highestRankGuess ]
-          sameSuit = sameF suit target guess
+          sameSuit = sameF (map suit target) (map suit guess)
 
-sameF :: Eq a => (b -> a) -> [b] -> [b] -> Int
-sameF f target guess = min (length firstIntersect) (length secondIntersect)
-    where firstIntersect = intersect (map f guess) (map f target)
-          secondIntersect = intersect (map f target) (map f guess)
+-- How many cards of the same F function (which strips out a value)
+-- Can we use id function for checking exact matches???
+-- sameF :: Eq a => (b -> a) -> [b] -> [b] -> Int
+sameF _ [] = 0
+sameF [] _ = 0
+sameF target (c:cards)
+    | elem c target = 
+        1 + sameF (delete c target) cards
+    | otherwise = sameF target cards
+
+
+    -- where firstIntersect = intersect (map f guess) (map f target)
+    --       secondIntersect = intersect (map f target) (map f guess)
 
 -- ========= END METHODS FOR ANSWERER ========= --
 
@@ -41,8 +56,8 @@ type GameState = [[Card]]
 initialGuess :: Int -> ([Card], GameState)
 initialGuess n 
     | n == 2 = ([Card Club R5, Card Diamond R10], state)
-    | n == 3 = ([Card Club R5, Card Diamond R8, Card Heart Jack], state)
-    | n == 4 = ([Card Club R4, Card Diamond R7, Card Heart R10, Card Spade Queen], state)
+    | n == 3 = ([Card Club R5, Card Diamond R8, Card Diamond Jack], state)
+    | n == 4 = ([Card Club R4, Card Diamond R7, Card Club R10, Card Diamond Queen], state)
     | otherwise = error "n must be 2, 3 or 4"
     where
         cards = [Card s r| s <- [Club ..], r <- [R2 ..]]
@@ -55,7 +70,36 @@ nextGuess :: ([Card], GameState) -> FeedbackScore -> ([Card], GameState)
 nextGuess prevGuessWithState prevFeedback
         = (newGuess, newState)
         where newState = eliminateGuesses prevGuessWithState prevFeedback
-              newGuess = newState !! ((length newState - 1) `div` 2)
+              newGuess = optimalGuess newState newState
+            --   newGuess = newState !! ((length newState - 1) `div` 2)
+
+
+-- We know guess is somewhere in the range of GameState, return the best one
+-- By averaging the number of potential spaces after that guess is made
+optimalGuess :: GameState -> GameState -> [Card]
+optimalGuess guesses answers = snd (minimumBy (comparing fst) [ guessAverageSpace g answers | g <- guesses ])
+
+
+optimalGuessDebug :: GameState -> GameState -> [(Int, [Card])]
+optimalGuessDebug guesses answers = [ guessAverageSpace g answers | g <- guesses ]
+
+-- FIX TYPE SIGNATURE HERE, THE / IS NOT WORKING
+-- What's the average size of the possible guessSpaces, if I take this guess
+
+-- The feedback is any possible for that guess, and when unwrapped, eliminates based on that feedback for each possible
+-- answer against that single guess
+-- Output: (Avg space of result, guess)
+guessAverageSpace guess answers = ((sum [(length (eliminateGuesses (guess, answers) (a_feedback))) | a_feedback <- feedbacks]) `div` (length feedbacks), guess)
+    where feedbacks = getAllFeedbacks guess answers
+    
+
+-- Gets all the possible feedbacks for each posssible guess
+-- i.e. a guess will have feedbacks only relevant to the potential answers, which changes (game state is reduced on
+-- each iteration)
+-- Doesn't actually matter what the answer is, since it's only the feedback that actually narrows
+-- the search space. Hence, no need to track answer and thus can also remove duplicates
+getAllFeedbacks :: [Card] -> GameState -> [FeedbackScore]
+getAllFeedbacks guess answers = nub [feedback ans guess | ans <- answers ]
 
 -- Removes any guesses that can not possibly be in the solution
 -- Input: (Previous guess, Remaining possible guesses), feedback
@@ -88,7 +132,6 @@ checkGuess prev_guess prev_feedback guess = matches && lower && sameRank && high
                    then this_feedback_same_suit == 0
                    else this_feedback_same_suit >= ffth prev_feedback
 
-
 -- Tuple accessor functions
 frst :: (a, b, c, d, e) -> a
 frst (a, b, c, d, e) = a
@@ -107,9 +150,29 @@ ffth (a, b, c, d, e) = e
 
 
 -- Make testing faster
-initGuess = initialGuess 2
-ans = [Card Club R3, Card Heart R4]
-prevFeedback = feedback ans $ fst initGuess
+n = 4
+ans = [Card Club R2, Card Diamond R2, Card Heart R7, Card Spade Ace]
+initGuess = initialGuess n
+fstFeedback = feedback ans (fst initGuess)
+fstState = eliminateGuesses initGuess fstFeedback
+fstInFstState = [Card Club R2, Card Club R3, Card Club R7, Card Club King]
+allPossibleFeedbacksForFstInFstState = getAllFeedbacks fstInFstState fstState
+fstPossibleFeedback = allPossibleFeedbacksForFstInFstState !! 0
+avgSpaceIfGuessFstInFstState = guessAverageSpace fstInFstState fstState
+
+
+
+-- The run forerver begins here
+-- sndGuess = optimalGuess fstState fstState
+-- 
+
+
+-- guess1 = [Card Club R3, Card Club King, Card Diamond R5, Card Diamond R7]
+-- guess2 = [Card Club R2, Card Club R4, Card Club Ace, Card Diamond R4]
+
+-- fstFeedback = feedback ans $ fst initGuess
+cards = [Card s r| s <- [Club ..], r <- [R2 ..]]
+state = subsets n cards
 
 
 -- Below was taken from: https://stackoverflow.com/a/52602906
