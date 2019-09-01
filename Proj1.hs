@@ -67,10 +67,6 @@ matchLsts target (c:cards)
 -- on feedback
 type GameState = [[Card]]
 
--- The program runs for too long (>10s for a solution) if the optimal guess
--- algorithm is run without this flag
-MAX_STATE_LEN_FOR_OPTIMAL_GUESS = 500
-
 -- Takes number of cards in answer as input. Returns a starting guess and the
 -- GameState. This guess aims to reduce the space of sets possible when the 
 -- return answer is given.
@@ -101,7 +97,7 @@ nextGuess prevGuessWithState prevFeedback
         = (newGuess, newState)
         where newState = eliminateGuesses prevGuessWithState prevFeedback
               nSLen = length newState
-              newGuess = if nSLen > MAX_STATE_LEN_FOR_OPTIMAL_GUESS
+              newGuess = if nSLen > 500
                          then (sort newState) !! (nSLen `div` 2)
                          else optimalGuess newState newState
 
